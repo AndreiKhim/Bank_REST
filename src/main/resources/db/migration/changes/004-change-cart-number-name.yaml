@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-change-cart-number-name
+      author: andrey
+      changes:
+        - renameColumn:
+            tableName: cards
+            oldColumnName: card_number
+            newColumnName: card_number_encrypted
+            columnDataType: varchar(255)
+
