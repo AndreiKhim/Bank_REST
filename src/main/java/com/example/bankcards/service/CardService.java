@@ -1,13 +1,15 @@
 package com.example.bankcards.service;
 
-import com.example.bankcards.dto.CardRequest;
 import com.example.bankcards.dto.CardResponse;
+import com.example.bankcards.dto.CreateCardRequest;
 import com.example.bankcards.entity.Card;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.entity.enums.CardStatus;
 import com.example.bankcards.exception.CardNotFoundException;
+import com.example.bankcards.exception.InvalidTransactionException;
 import com.example.bankcards.mapper.CardMapper;
 import com.example.bankcards.repository.CardRepository;
+import com.example.bankcards.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -24,74 +26,75 @@ public class CardService {
     private final CardRepository cardRepository;
     private final CardMapper cardMapper;
     private final EncryptionService encryptionService;
+    private final TransactionRepository transactionRepository;
 
     @Value("${app.card.default.expiration-years}")
     private int cardExpirationYears;
 
     // ====== Админские методы ======
 
-    public CardResponse createCard(User user, CardRequest request) {
-        Card card = new Card();
-        card.setUser(user);
-        card.setCardStatus(CardStatus.ACTIVE);
-        card.setBalance(request.getBalance() != null ? request.getBalance() : BigDecimal.ZERO);
-        card.setExpirationDate(LocalDate.now().plusYears(cardExpirationYears));
-
-        // Шифруем номер карты перед сохранением
+    public CardResponse createCard(User user, CreateCardRequest request) {
         String encryptedNumber = encryptionService.encrypt(request.getCardNumber());
-        card.setCardNumberEncrypted(encryptedNumber);
 
-        // Сохраняем в БД
+        Card card = new Card(
+                encryptedNumber,
+                LocalDate.now().plusYears(cardExpirationYears),
+                CardStatus.ACTIVE,
+                request.getBalance() != null ? request.getBalance() : BigDecimal.ZERO,
+                false,
+                user
+        );
+
         Card savedCard = cardRepository.save(card);
-
-        // Расшифровываем для DTO
-        String plainNumber = encryptionService.decrypt(savedCard.getCardNumberEncrypted());
-        return cardMapper.toResponse(savedCard, plainNumber);
+        return cardMapper.toResponse(savedCard);
     }
 
     public CardResponse activateCard(Long cardId) {
         Card card = getCardById(cardId);
         card.setCardStatus(CardStatus.ACTIVE);
-        Card saved = cardRepository.save(card);
-        return cardMapper.toResponse(saved, encryptionService.decrypt(saved.getCardNumberEncrypted()));
+        card.setBlockRequested(false);
+        return cardMapper.toResponse(cardRepository.save(card));
     }
 
     public CardResponse blockCard(Long cardId) {
         Card card = getCardById(cardId);
         card.setCardStatus(CardStatus.BLOCKED);
-        Card saved = cardRepository.save(card);
-        return cardMapper.toResponse(saved, encryptionService.decrypt(saved.getCardNumberEncrypted()));
+        card.setBlockRequested(false);
+        return cardMapper.toResponse(cardRepository.save(card));
     }
 
     public void deleteCard(Long cardId) {
-        if (!cardRepository.existsById(cardId)) {
-            throw new CardNotFoundException("Card not found with id: " + cardId);
+        Card card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new CardNotFoundException("Card not found with id: " + cardId));
+
+        // Проверяем, есть ли связанные транзакции
+        boolean hasTransactions =
+                transactionRepository.existsBySourceCard(card) ||
+                        transactionRepository.existsByDestinationCard(card);
+
+        if (hasTransactions) {
+            throw new InvalidTransactionException("Нельзя удалить карту: по ней есть связанные транзакции");
         }
-        cardRepository.deleteById(cardId);
+
+        cardRepository.delete(card);
     }
 
     public Page<CardResponse> getAllCards(Pageable pageable) {
         return cardRepository.findAll(pageable)
-                .map(card -> cardMapper.toResponse(card, encryptionService.decrypt(card.getCardNumberEncrypted())));
+                .map(cardMapper::toResponse);
     }
 
     // ====== Методы пользователя ======
 
     public Page<CardResponse> getUserCards(User user, Pageable pageable) {
         return cardRepository.findByUser(user, pageable)
-                .map(card -> cardMapper.toResponse(card, encryptionService.decrypt(card.getCardNumberEncrypted())));
-    }
-
-    public Page<CardResponse> getUserCardsByStatus(User user, CardStatus status, Pageable pageable) {
-        return cardRepository.findByUserAndCardStatus(user, status, pageable)
-                .map(card -> cardMapper.toResponse(card, encryptionService.decrypt(card.getCardNumberEncrypted())));
+                .map(cardMapper::toResponse);
     }
 
     public CardResponse requestBlockCard(Long cardId, User user) {
         Card card = getCardByIdAndUser(cardId, user);
         card.setBlockRequested(true);
-        Card saved = cardRepository.save(card);
-        return cardMapper.toResponse(saved, encryptionService.decrypt(saved.getCardNumberEncrypted()));
+        return cardMapper.toResponse(cardRepository.save(card));
     }
 
     public BigDecimal getCardBalance(Long cardId, User user) {

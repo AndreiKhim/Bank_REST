@@ -5,6 +5,7 @@ import com.example.bankcards.dto.UserRequest;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.entity.enums.Role;
 import com.example.bankcards.exception.UserNotFoundException;
+import com.example.bankcards.mapper.UserMapper;
 import com.example.bankcards.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,30 +16,34 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
-
 @Service
-public class UserService implements UserDetailsService { // <--- добавили implements UserDetailsService
+public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserMapper userMapper; // 👈 добавили маппер
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       UserMapper userMapper) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.userMapper = userMapper;
     }
 
     public User registerUser(RegisterRequest request) {
-        User user = new User();
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setEmail(request.getEmail());
-        user.setPhoneNumber(request.getPhoneNumber());
-        user.setRole(Role.valueOf(request.getRole().toUpperCase())); // или просто Role.USER
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        User user = new User(
+                request.getLastName(),
+                request.getFirstName(),
+                request.getEmail(),
+                request.getPhoneNumber(),
+                passwordEncoder.encode(request.getPassword()),
+                Role.valueOf(request.getRole().toUpperCase())
+        );
         return userRepository.save(user);
     }
 
-    // Реализация UserDetailsService  - Этот метод будет вызываться в JwtAuthenticationFilter
+    // Реализация UserDetailsService — вызывается в JwtAuthenticationFilter
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)
@@ -46,7 +51,7 @@ public class UserService implements UserDetailsService { // <--- добавил�
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getEmail())
                 .password(user.getPassword())
-                .roles(user.getRole().name()) // role как строка "ADMIN"/"USER"
+                .roles(user.getRole().name())
                 .build();
     }
 
@@ -60,23 +65,20 @@ public class UserService implements UserDetailsService { // <--- добавил�
     }
 
     public User createUser(RegisterRequest request) {
-        User user = new User();
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setEmail(request.getEmail());
-        user.setPhoneNumber(request.getPhoneNumber());
-        user.setRole(Role.valueOf(request.getRole().toUpperCase()));
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        User user = new User(
+                request.getLastName(),
+                request.getFirstName(),
+                request.getEmail(),
+                request.getPhoneNumber(),
+                passwordEncoder.encode(request.getPassword()),
+                Role.valueOf(request.getRole().toUpperCase())
+        );
         return userRepository.save(user);
     }
 
     public User updateUser(Long userId, UserRequest userRequest) {
         User user = getUserById(userId);
-        user.setFirstName(userRequest.getFirstName());
-        user.setLastName(userRequest.getLastName());
-        user.setEmail(userRequest.getEmail());
-        user.setPhoneNumber(userRequest.getPhoneNumber());
-        user.setRole(Role.valueOf(userRequest.getRole().toUpperCase()));
+        userMapper.updateUserFromRequest(userRequest, user);
         return userRepository.save(user);
     }
 

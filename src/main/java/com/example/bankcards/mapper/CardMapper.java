@@ -14,18 +14,19 @@ public class CardMapper {
 
     /**
      * Преобразует сущность Card в DTO для отображения пользователю.
-     * Принимает уже расшифрованный номер карты, маскирует его для отображения.
+     * Автоматически расшифровывает и маскирует номер карты.
      */
-    public CardResponse toResponse(Card card, String plainNumber) {
+    public CardResponse toResponse(Card card) {
         if (card == null) return null;
 
         CardResponse response = new CardResponse();
         response.setId(card.getId());
 
-        // Маскируем номер карты
+        // Декодируем и маскируем
+        String plainNumber = encryptionService.decrypt(card.getCardNumberEncrypted());
         response.setCardNumber(encryptionService.maskCardNumber(plainNumber));
 
-        // Владелец карты (фамилия + имя)
+        // Владелец карты (формируется из User внутри Card#getCardHolder)
         response.setCardHolder(card.getCardHolder());
 
         response.setExpirationDate(card.getExpirationDate());

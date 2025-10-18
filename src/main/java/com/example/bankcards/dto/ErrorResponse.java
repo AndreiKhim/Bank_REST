@@ -1,16 +1,13 @@
 package com.example.bankcards.dto;
 
-import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
-@Data
+@Getter
+@RequiredArgsConstructor
 public class ErrorResponse {
-    private String message;
 
-    public ErrorResponse(String message) {
-        this.message = message;
-    }
-
-    public String getMessage() {
-        return message;
-    }
+    @Schema(description = "Сообщение об ошибке", example = "Пользователь не найден")
+    private final String message;
 }

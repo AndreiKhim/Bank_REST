@@ -1,16 +1,16 @@
 package com.example.bankcards.entity;
 
-import jakarta.persistence.*;
-import jakarta.persistence.OneToMany;
 import com.example.bankcards.entity.enums.Role;
+import jakarta.persistence.*;
+
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
     private Long id;
 
     @Column(name = "last_name", nullable = false)
@@ -29,17 +29,23 @@ public class User {
     private String password;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
+    @Column(name = "role", nullable = false, length = 20)
     private Role role;
 
-    @OneToMany(mappedBy = "user")
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private List<Card> cards;
 
+    // === Конструкторы ===
 
-    public User() {
+    protected User() {
     }
 
-    public User(String lastName, String firstName, String email, String phoneNumber, String password, Role role) {
+    public User(String lastName,
+                String firstName,
+                String email,
+                String phoneNumber,
+                String password,
+                Role role) {
         this.lastName = lastName;
         this.firstName = firstName;
         this.email = email;
@@ -48,51 +54,44 @@ public class User {
         this.role = role;
     }
 
+    // === Геттеры и сеттеры ===
+
     public Long getId() {
         return id;
     }
 
-    // Сеттер для id
     public void setId(Long id) {
         this.id = id;
     }
 
-    // Геттер для lastName
     public String getLastName() {
         return lastName;
     }
 
-    // Сеттер для lastName
     public void setLastName(String lastName) {
         this.lastName = lastName;
     }
 
-    // Геттер для firstName
     public String getFirstName() {
         return firstName;
     }
 
-    // Сеттер для firstName
     public void setFirstName(String firstName) {
         this.firstName = firstName;
     }
 
-    // Геттер для email
     public String getEmail() {
         return email;
     }
 
-    // Сеттер для email
     public void setEmail(String email) {
         this.email = email;
     }
 
-    // Геттер для phoneNumber
     public String getPhoneNumber() {
         return phoneNumber;
     }
 
-    // Сеттер для phoneNumber
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
     }
@@ -105,25 +104,46 @@ public class User {
         this.password = password;
     }
 
-
-    // Геттер для role
     public Role getRole() {
         return role;
     }
 
-    // Сеттер для role
     public void setRole(Role role) {
         this.role = role;
     }
 
-    // Геттер для cards
     public List<Card> getCards() {
         return cards;
     }
 
-    // Cеттер для cards
     public void setCards(List<Card> cards) {
         this.cards = cards;
     }
 
+    // === equals/hashCode только по id ===
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof User)) return false;
+        User user = (User) o;
+        return id != null && id.equals(user.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
+    }
+
+    // === toString (без cards и password) ===
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", lastName='" + lastName + '\'' +
+                ", firstName='" + firstName + '\'' +
+                ", email='" + email + '\'' +
+                ", phoneNumber='" + phoneNumber + '\'' +
+                ", role=" + role +
+                '}';
+    }
 }

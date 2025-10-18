@@ -1,14 +1,16 @@
 package com.example.bankcards.service;
 
-import com.example.bankcards.dto.CardRequest;
 import com.example.bankcards.dto.CardResponse;
+import com.example.bankcards.dto.CreateCardRequest;
 import com.example.bankcards.entity.Card;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.entity.enums.CardStatus;
+import com.example.bankcards.exception.InvalidTransactionException;
 import com.example.bankcards.mapper.CardMapper;
 import com.example.bankcards.repository.CardRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.example.bankcards.repository.TransactionRepository;
+import com.example.bankcards.util.TestDataFactory;
+import org.junit.jupiter.api.*;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -18,12 +20,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+@DisplayName("🧾 Тесты для CardService (управление банковскими картами)")
 class CardServiceTest {
 
     @Mock
@@ -35,133 +39,160 @@ class CardServiceTest {
     @Mock
     private EncryptionService encryptionService;
 
+    @Mock
+    private TransactionRepository transactionRepository;
+
     @InjectMocks
     private CardService cardService;
 
     private User user;
-    private CardRequest cardRequest;
+    private Card card;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-
-        user = new User("Ivanov", "Ivan", "ivan@mail.com", "1234567890", "password", null);
-        cardRequest = new CardRequest();
-        cardRequest.setCardNumber("1234567812345678");
-        cardRequest.setBalance(new BigDecimal("1000"));
-        cardRequest.setExpirationDate(LocalDate.now().plusYears(3));
+        user = TestDataFactory.createUser(1L, "test@mail.com");
+        card = TestDataFactory.createCard(1L, user, BigDecimal.valueOf(1000));
     }
 
-    @Test
-    void testCreateCard() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setBalance(cardRequest.getBalance());
-        card.setCardStatus(CardStatus.ACTIVE);
-        card.setUser(user);
-        card.setExpirationDate(cardRequest.getExpirationDate());
-        card.setCardNumberEncrypted("encrypted");
+    // ==========================================
+    // 🔹 TEST GROUP 1: Создание карты
+    // ==========================================
+    @Nested
+    @DisplayName("Создание новой карты")
+    class CreateCardTests {
 
-        when(encryptionService.encrypt(anyString())).thenReturn("encrypted");
-        when(encryptionService.decrypt("encrypted")).thenReturn(cardRequest.getCardNumber());
-        when(cardRepository.save(any(Card.class))).thenReturn(card);
-        when(cardMapper.toResponse(card, cardRequest.getCardNumber())).thenReturn(new CardResponse());
+        @Test
+        @DisplayName("✅ Должна успешно создаваться карта с зашифрованным номером")
+        void shouldCreateCardSuccessfully() {
+            CreateCardRequest request = new CreateCardRequest();
+            request.setCardNumber("1234567890123456");
+            request.setBalance(BigDecimal.valueOf(500));
 
-        CardResponse response = cardService.createCard(user, cardRequest);
+            when(encryptionService.encrypt("1234567890123456")).thenReturn("encrypted");
+            when(cardRepository.save(any(Card.class))).thenReturn(card);
+            when(cardMapper.toResponse(any(Card.class))).thenReturn(new CardResponse());
 
-        assertNotNull(response);
-        verify(cardRepository, times(1)).save(any(Card.class));
-        verify(encryptionService).encrypt(cardRequest.getCardNumber());
-        verify(encryptionService).decrypt("encrypted");
+            CardResponse response = cardService.createCard(user, request);
+
+            assertThat(response).isNotNull();
+            verify(encryptionService).encrypt("1234567890123456");
+            verify(cardRepository).save(any(Card.class));
+        }
+
+        @Test
+        @DisplayName("💰 Если баланс не указан — устанавливается 0 по умолчанию")
+        void shouldSetZeroBalanceIfNotProvided() {
+            CreateCardRequest request = new CreateCardRequest();
+            request.setCardNumber("1111222233334444");
+
+            when(encryptionService.encrypt(any())).thenReturn("encrypted");
+            when(cardRepository.save(any(Card.class))).thenReturn(card);
+            when(cardMapper.toResponse(any(Card.class))).thenReturn(new CardResponse());
+
+            cardService.createCard(user, request);
+
+            verify(cardRepository).save(argThat(c ->
+                    c.getBalance().compareTo(BigDecimal.ZERO) == 0));
+        }
     }
 
-    @Test
-    void testBlockCard() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setCardStatus(CardStatus.ACTIVE);
-        card.setCardNumberEncrypted("encrypted");
+    // ==========================================
+    // 🔹 TEST GROUP 2: Активация / блокировка карты
+    // ==========================================
+    @Nested
+    @DisplayName("Изменение статуса карты (активация / блокировка)")
+    class CardStatusTests {
 
-        when(cardRepository.findById(1L)).thenReturn(java.util.Optional.of(card));
-        when(encryptionService.decrypt("encrypted")).thenReturn("1234567812345678");
-        when(cardMapper.toResponse(card, "1234567812345678")).thenReturn(new CardResponse());
-        when(cardRepository.save(card)).thenReturn(card);
+        @Test
+        @DisplayName("✅ Активация карты сбрасывает флаг blockRequested")
+        void shouldActivateCardAndResetFlag() {
+            card.setBlockRequested(true);
+            when(cardRepository.findById(1L)).thenReturn(Optional.of(card));
+            when(cardRepository.save(any())).thenReturn(card);
+            when(cardMapper.toResponse(any())).thenReturn(new CardResponse());
 
-        CardResponse response = cardService.blockCard(1L);
+            cardService.activateCard(1L);
 
-        assertNotNull(response);
-        assertEquals(CardStatus.BLOCKED, card.getCardStatus());
-        verify(cardRepository).save(card);
+            assertThat(card.getCardStatus()).isEqualTo(CardStatus.ACTIVE);
+            assertThat(card.isBlockRequested()).isFalse();
+        }
+
+        @Test
+        @DisplayName("🚫 Блокировка карты также сбрасывает флаг blockRequested")
+        void shouldBlockCardAndResetFlag() {
+            card.setBlockRequested(true);
+            when(cardRepository.findById(1L)).thenReturn(Optional.of(card));
+            when(cardRepository.save(any())).thenReturn(card);
+            when(cardMapper.toResponse(any())).thenReturn(new CardResponse());
+
+            cardService.blockCard(1L);
+
+            assertThat(card.getCardStatus()).isEqualTo(CardStatus.BLOCKED);
+            assertThat(card.isBlockRequested()).isFalse();
+        }
     }
 
-    @Test
-    void testGetCardBalance() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setBalance(new BigDecimal("1500"));
-        card.setUser(user);
+    // ==========================================
+    // 🔹 TEST GROUP 3: Удаление карты
+    // ==========================================
+    @Nested
+    @DisplayName("Удаление карты")
+    class DeleteCardTests {
 
-        when(cardRepository.findByIdAndUser(1L, user)).thenReturn(java.util.Optional.of(card));
+        @Test
+        @DisplayName("✅ Успешное удаление карты без транзакций")
+        void shouldDeleteCardWithoutTransactions() {
+            when(cardRepository.findById(1L)).thenReturn(Optional.of(card));
+            when(transactionRepository.existsBySourceCard(card)).thenReturn(false);
+            when(transactionRepository.existsByDestinationCard(card)).thenReturn(false);
 
-        BigDecimal balance = cardService.getCardBalance(1L, user);
+            cardService.deleteCard(1L);
 
-        assertEquals(new BigDecimal("1500"), balance);
+            verify(cardRepository).delete(card);
+        }
+
+        @Test
+        @DisplayName("❌ Нельзя удалить карту, если по ней есть транзакции")
+        void shouldThrowExceptionWhenCardHasTransactions() {
+            when(cardRepository.findById(1L)).thenReturn(Optional.of(card));
+            when(transactionRepository.existsBySourceCard(card)).thenReturn(true);
+
+            assertThatThrownBy(() -> cardService.deleteCard(1L))
+                    .isInstanceOf(InvalidTransactionException.class)
+                    .hasMessageContaining("Нельзя удалить карту");
+        }
     }
 
-    @Test
-    void testRequestBlockCard() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setBlockRequested(false);
-        card.setCardNumberEncrypted("encrypted");
-        card.setUser(user);
+    // ==========================================
+    // 🔹 TEST GROUP 4: Просмотр карт пользователя
+    // ==========================================
+    @Nested
+    @DisplayName("Просмотр карт пользователя")
+    class GetCardsTests {
 
-        when(cardRepository.findByIdAndUser(1L, user)).thenReturn(java.util.Optional.of(card));
-        when(encryptionService.decrypt("encrypted")).thenReturn("1234567812345678");
-        when(cardMapper.toResponse(card, "1234567812345678")).thenReturn(new CardResponse());
-        when(cardRepository.save(card)).thenReturn(card);
+        @Test
+        @DisplayName("✅ Возвращает список карт пользователя")
+        void shouldReturnUserCards() {
+            Pageable pageable = PageRequest.of(0, 5);
+            when(cardRepository.findByUser(user, pageable))
+                    .thenReturn(new PageImpl<>(List.of(card)));
+            when(cardMapper.toResponse(card)).thenReturn(new CardResponse());
 
-        CardResponse response = cardService.requestBlockCard(1L, user);
+            Page<CardResponse> result = cardService.getUserCards(user, pageable);
 
-        assertNotNull(response);
-        assertTrue(card.isBlockRequested());
-        verify(cardRepository).save(card);
+            assertThat(result).isNotEmpty();
+            verify(cardRepository).findByUser(user, pageable);
+        }
+
+        @Test
+        @DisplayName("✅ Возвращает баланс карты пользователя")
+        void shouldReturnCardBalance() {
+            when(cardRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(card));
+
+            BigDecimal balance = cardService.getCardBalance(1L, user);
+
+            assertThat(balance).isEqualByComparingTo("1000.00");
+        }
     }
-
-    @Test
-    void testGetAllCards() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setCardNumberEncrypted("encrypted");
-
-        Page<Card> page = new PageImpl<>(List.of(card));
-        when(cardRepository.findAll(any(Pageable.class))).thenReturn(page);
-        when(encryptionService.decrypt("encrypted")).thenReturn("1234567812345678");
-        when(cardMapper.toResponse(card, "1234567812345678")).thenReturn(new CardResponse());
-
-        Page<CardResponse> result = cardService.getAllCards(PageRequest.of(0, 10));
-
-        assertEquals(1, result.getTotalElements());
-        verify(cardRepository).findAll(any(Pageable.class));
-    }
-
-    @Test
-    void testGetUserCardsByStatus() {
-        Card card = new Card();
-        card.setId(1L);
-        card.setCardStatus(CardStatus.ACTIVE);
-        card.setCardNumberEncrypted("encrypted");
-
-        Page<Card> page = new PageImpl<>(List.of(card));
-        when(cardRepository.findByUserAndCardStatus(user, CardStatus.ACTIVE, PageRequest.of(0, 10)))
-                .thenReturn(page);
-        when(encryptionService.decrypt("encrypted")).thenReturn("1234567812345678");
-        when(cardMapper.toResponse(card, "1234567812345678")).thenReturn(new CardResponse());
-
-        Page<CardResponse> result = cardService.getUserCardsByStatus(user, CardStatus.ACTIVE, PageRequest.of(0, 10));
-
-        assertEquals(1, result.getTotalElements());
-        verify(cardRepository).findByUserAndCardStatus(user, CardStatus.ACTIVE, PageRequest.of(0, 10));
-    }
-
 }

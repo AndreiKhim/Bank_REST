@@ -1,8 +1,11 @@
-package com.andreykhimchenko.bankacountmanagement.config;
+package com.example.bankcards.config;
 
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -15,11 +18,20 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Bank Account Management API")
                         .version("1.0")
-                        .description("Документация по REST API банковской системы управления счетами")
+                        .description("Документация по REST API банковской системы управления картами и транзакциями")
                         .contact(new Contact()
                                 .name("Andrey Khimchenko")
-                                .email("khimchenko_andrey@male.ru")
+                                .email("khimchenko_andrey@mail.ru")
                         )
-                );
+                )
+                .components(new Components()
+                        .addSecuritySchemes("bearerAuth",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")
+                        )
+                )
+                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
 }

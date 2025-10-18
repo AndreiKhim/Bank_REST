@@ -2,10 +2,15 @@ databaseChangeLog:
   - changeSet:
       id: 004-change-cart-number-name
       author: andrey
+      preConditions:
+        onFail: MARK_RAN
+        not:
+          columnExists:
+            tableName: cards
+            columnName: card_number_encrypted
       changes:
         - renameColumn:
             tableName: cards
             oldColumnName: card_number
             newColumnName: card_number_encrypted
-            columnDataType: varchar(255)
-
+            columnDataType: VARCHAR(255)

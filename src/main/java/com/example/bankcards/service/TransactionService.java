@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import com.example.bankcards.entity.enums.CardStatus;
 
 import java.math.BigDecimal;
 
@@ -34,48 +35,79 @@ public class TransactionService {
     @Transactional
     public TransactionResponse transfer(User user, TransferRequest request) {
         Card sourceCard = cardRepository.findByIdAndUser(request.getSourceCardId(), user)
-                .orElseThrow(() -> new CardNotFoundException("Source card not found or does not belong to user"));
+                .orElseThrow(() -> new CardNotFoundException("Исходная карта не найдена или не принадлежит пользователю"));
         Card destinationCard = cardRepository.findByIdAndUser(request.getDestinationCardId(), user)
-                .orElseThrow(() -> new CardNotFoundException("Destination card not found or does not belong to user"));
+                .orElseThrow(() -> new CardNotFoundException("Карта получателя не найдена или не принадлежит пользователю"));
 
         BigDecimal amount = request.getAmount();
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidTransactionException("Amount must be greater than zero");
+            throw new InvalidTransactionException("Сумма перевода должна быть больше нуля");
         }
 
-        Transaction transaction = new Transaction();
-        transaction.setSourceCard(sourceCard);
-        transaction.setDestinationCard(destinationCard);
-        transaction.setAmount(amount);
-        transaction.setType(TransactionType.TRANSFER);
+        // ================== Проверка статусов ==================
+        if (sourceCard.getCardStatus() != CardStatus.ACTIVE || destinationCard.getCardStatus() != CardStatus.ACTIVE) {
+            Transaction failedTx = new Transaction(
+                    sourceCard,
+                    destinationCard,
+                    amount,
+                    TransactionType.TRANSFER,
+                    TransactionStatus.FAILED,
+                    "Операция отклонена: одна из карт заблокирована или неактивна"
+            );
+            transactionRepository.save(failedTx);
+            return transactionMapper.toResponse(failedTx);
+        }
 
+        // ================== Проверка баланса ==================
         if (sourceCard.getBalance().compareTo(amount) < 0) {
-            transaction.setStatus(TransactionStatus.FAILED);
-            transaction.setDescription("Недостаточно средств");
-            transactionRepository.save(transaction);
-            return transactionMapper.toResponse(transaction);
+            Transaction failedTx = new Transaction(
+                    sourceCard,
+                    destinationCard,
+                    amount,
+                    TransactionType.TRANSFER,
+                    TransactionStatus.FAILED,
+                    "Недостаточно средств"
+            );
+            transactionRepository.save(failedTx);
+            return transactionMapper.toResponse(failedTx);
         }
 
-        // Списание и зачисление
+        // ================== Успешный перевод ==================
         sourceCard.setBalance(sourceCard.getBalance().subtract(amount));
         destinationCard.setBalance(destinationCard.getBalance().add(amount));
 
         cardRepository.save(sourceCard);
         cardRepository.save(destinationCard);
 
-        transaction.setStatus(TransactionStatus.SUCCESS);
-        transaction.setDescription(request.getDescription() != null ? request.getDescription() : "Перевод выполнен");
-        transactionRepository.save(transaction);
+        Transaction successTx = new Transaction(
+                sourceCard,
+                destinationCard,
+                amount,
+                TransactionType.TRANSFER,
+                TransactionStatus.SUCCESS,
+                request.getDescription() != null ? request.getDescription() : "Перевод выполнен"
+        );
+        transactionRepository.save(successTx);
 
-        return transactionMapper.toResponse(transaction);
+        return transactionMapper.toResponse(successTx);
     }
 
+
     /**
-     * Получение всех транзакций по всем картам пользователя с пагинацией.
+     * Получение всех транзакций по всем картам пользователя (USER).
      */
     public Page<TransactionResponse> getTransactionsForUser(User user, Pageable pageable) {
         return transactionRepository
                 .findBySourceCardUserOrDestinationCardUser(user, user, pageable)
+                .map(transactionMapper::toResponse);
+    }
+
+    /**
+     * Получение всех транзакций в системе (ADMIN).
+     */
+    public Page<TransactionResponse> getAllTransactions(Pageable pageable) {
+        return transactionRepository
+                .findAll(pageable)
                 .map(transactionMapper::toResponse);
     }
 }

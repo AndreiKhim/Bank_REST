@@ -10,18 +10,31 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    // Разрешённые источники (читаем из application.yaml)
+    @Value("${app.cors.allowed-origins}")
+    private String[] allowedOrigins;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthFilter) throws Exception {
         http
+                // ✅ Разрешаем CORS и применяем конфигурацию
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Разрешаем доступ к аутентификации и Swagger UI
+                        // Доступ без авторизации
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/swagger-ui.html",
@@ -30,16 +43,32 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/openapi.yaml"
                         ).permitAll()
-                        // Доступ только для админов
+                        // Только админ
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // Все остальные запросы требуют аутентификации
+                        // Остальное — только аутентифицированные пользователи
                         .anyRequest().authenticated()
                 );
 
-        // Добавляем JWT фильтр перед стандартной аутентификацией
+        // JWT фильтр перед UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // ✅ Конфигурация CORS — best practice
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOrigins(Arrays.asList(allowedOrigins));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L); // 1 час кэширования CORS preflight
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     @Bean

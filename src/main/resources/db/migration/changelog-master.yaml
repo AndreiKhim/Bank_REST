@@ -7,4 +7,3 @@ databaseChangeLog:
       file: db/migration/changes/003-create-transactions-table.yaml
   - include:
       file: db/migration/changes/004-change-cart-number-name.yaml
-

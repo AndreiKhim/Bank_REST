@@ -6,7 +6,7 @@ import java.util.Base64;
 @Service
 public class EncryptionService {
 
-    // 🔑 простой вариант — Base64 (НЕ безопасный, но хватит для тестового задания)
+    //  простой вариант — Base64
     public String encrypt(String plainText) {
         return Base64.getEncoder().encodeToString(plainText.getBytes());
     }

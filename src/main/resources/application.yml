@@ -11,20 +11,22 @@ spring:
     show-sql: true
     hibernate:
       ddl-auto: update
-      properties:
-        hibernate:
-          format_sql: true
-          dialect: org.hibernate.dialect.MySQL8Dialect
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQL8Dialect
 
   liquibase:
     change-log: classpath:db/migration/changelog-master.yaml
     enabled: true
 
-# Настройки лимитов и срока действия карт
+# Настройки лимитов и срока действия карт + cors
 app:
   card:
     default:
       expiration-years: ${CARD_EXPIRATION_YEARS:3}
+  cors:
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000
 
 # Метрики и экспозиция эндпоинтов
 management:
@@ -43,11 +45,13 @@ logging:
 # Настройки обработки ошибок
 server:
   error:
-    include-message: always
-    include-stacktrace: always
+    include-message: never
+    include-stacktrace: never
 
 # SpringDoc / Swagger
 springdoc:
+  api-docs:
+    path: /v3/api-docs
   swagger-ui:
     url: /openapi.yaml
     path: /swagger-ui.html

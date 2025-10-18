@@ -1,24 +1,19 @@
-openapi: 3.0.3
+openapi: 3.0.1
 info:
   title: Bank REST API
-  description: Минимальная документация API для проекта Bank REST с обработкой ошибок
-  version: 1.0.1
+  version: 1.0.0
+  description: REST API для управления пользователями, картами и транзакциями
+  contact:
+    name: Andrey Khimchenko
+    email: khimchenko_andrey@mail.ru
 
 servers:
   - url: http://localhost:8080
-
-tags:
-  - name: Auth
-  - name: Cards
-  - name: Transactions
-  - name: Users
+    description: Local server
 
 paths:
-  # =================== Auth ===================
   /api/auth/register:
     post:
-      tags:
-        - Auth
       summary: Регистрация нового пользователя
       requestBody:
         required: true
@@ -34,13 +29,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: Bad Request (например, email уже существует)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Внутренняя ошибка сервера
+          description: Пользователь с таким email уже существует
           content:
             application/json:
               schema:
@@ -48,15 +37,13 @@ paths:
 
   /api/auth/login:
     post:
-      tags:
-        - Auth
-      summary: Логин пользователя
+      summary: Аутентификация пользователя
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: '#/components/schemas/AuthRequest'
       responses:
         '200':
           description: Успешный вход
@@ -65,59 +52,99 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
-          description: Неверный пароль
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Пользователь не найден
+          description: Неверный email или пароль
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  # =================== Cards ===================
-  /api/cards:
+  /api/users/me:
     get:
-      tags:
-        - Cards
-      summary: Получить все карты (админ)
-      parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-          default: 0
-        - name: size
-          in: query
-          schema:
-            type: integer
-          default: 5
+      summary: Получение профиля текущего пользователя
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: Список карт
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    put:
+      summary: Обновление профиля текущего пользователя
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '200':
+          description: Обновленный профиль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/admin/users:
+    get:
+      summary: Получение списка всех пользователей (ADMIN)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список пользователей
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CardResponse'
-        '403':
-          description: Доступ запрещен
+                  $ref: '#/components/schemas/UserResponse'
+    post:
+      summary: Создание пользователя (ADMIN)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Созданный пользователь
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/UserResponse'
 
-  /api/cards/{userId}:
-    post:
-      tags:
-        - Cards
-      summary: Создать карту для пользователя (админ)
+  /api/admin/users/{id}:
+    get:
+      summary: Получение пользователя по ID (ADMIN)
+      security:
+        - bearerAuth: []
       parameters:
-        - name: userId
-          in: path
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    put:
+      summary: Обновление пользователя (ADMIN)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
           required: true
           schema:
             type: integer
@@ -126,7 +153,130 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CardRequest'
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '200':
+          description: Обновленный пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    delete:
+      summary: Удаление пользователя (ADMIN)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Пользователь удален
+
+  /api/admin/cards:
+    get:
+      summary: Получение всех карт (ADMIN)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: size
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Страница карт
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CardResponse'
+                  totalElements:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  size:
+                    type: integer
+
+  /api/admin/cards/user/{userId}:
+    get:
+      summary: Получение карт пользователя по ID (ADMIN)
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+          description: ID пользователя
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 0
+          description: Номер страницы
+        - in: query
+          name: size
+          schema:
+            type: integer
+            default: 5
+          description: Размер страницы
+      responses:
+        '200':
+          description: Список карт пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CardResponse'
+                  totalElements:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  size:
+                    type: integer
+        '404':
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
+  /api/admin/cards/{userId}:
+    post:
+      summary: Создание карты для пользователя (ADMIN)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
       responses:
         '201':
           description: Карта создана
@@ -134,21 +284,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardResponse'
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
-  /api/cards/{cardId}/block:
+  /api/admin/cards/{cardId}/block:
     put:
-      tags:
-        - Cards
-      summary: Заблокировать карту (админ)
+      summary: Блокировка карты (ADMIN)
+      security:
+        - bearerAuth: [ ]
       parameters:
-        - name: cardId
-          in: path
+        - in: path
+          name: cardId
           required: true
           schema:
             type: integer
@@ -159,15 +303,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardResponse'
+        '404':
+          description: Карта не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
-  /api/cards/{cardId}/activate:
+  /api/admin/cards/{cardId}/activate:
     put:
-      tags:
-        - Cards
-      summary: Активировать карту (админ)
+      summary: Активация карты (ADMIN)
+      security:
+        - bearerAuth: [ ]
       parameters:
-        - name: cardId
-          in: path
+        - in: path
+          name: cardId
           required: true
           schema:
             type: integer
@@ -178,78 +328,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardResponse'
-
-  /api/cards/{cardId}:
-    delete:
-      tags:
-        - Cards
-      summary: Удалить карту (админ)
-      parameters:
-        - name: cardId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '204':
-          description: Карта удалена
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/cards/my:
-    get:
-      tags:
-        - Cards
-      summary: Получить свои карты
-      parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-          default: 0
-        - name: size
-          in: query
-          schema:
-            type: integer
-          default: 5
-      responses:
-        '200':
-          description: Список карт пользователя
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CardResponse'
-
-  /api/cards/{cardId}/request-block:
-    put:
-      tags:
-        - Cards
-      summary: Запрос на блокировку карты (пользователь)
-      parameters:
-        - name: cardId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Карта успешно заблокирована
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CardResponse'
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Карта не найдена
           content:
@@ -257,14 +335,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/cards/{cardId}/balance:
-    get:
-      tags:
-        - Cards
-      summary: Получить баланс карты (пользователь)
+  /api/admin/cards/{cardId}:
+    delete:
+      summary: Удаление карты (ADMIN)
+      security:
+        - bearerAuth: []
       parameters:
-        - name: cardId
-          in: path
+        - in: path
+          name: cardId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Карта удалена
+
+  /api/users/me/cards:
+    get:
+      summary: Получение карт текущего пользователя
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список карт
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardResponse'
+
+  /api/users/me/cards/{cardId}/balance:
+    get:
+      summary: Получение баланса карты
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cardId
           required: true
           schema:
             type: integer
@@ -276,36 +384,31 @@ paths:
               schema:
                 type: number
                 format: double
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Карта не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
-  # =================== Transactions ===================
+  /api/users/me/cards/{cardId}/request-block:
+    put:
+      summary: Запрос на блокировку карты (USER)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cardId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Запрос на блокировку отправлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+
   /api/transactions/my:
     get:
-      tags:
-        - Transactions
-      summary: Получить свои транзакции
-      parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-          default: 0
-        - name: size
-          in: query
-          schema:
-            type: integer
-          default: 5
+      summary: Получение транзакций текущего пользователя
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Список транзакций
@@ -315,18 +418,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TransactionResponse'
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
   /api/transactions/transfer:
     post:
-      tags:
-        - Transactions
       summary: Перевод между своими картами
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -335,225 +432,128 @@ paths:
               $ref: '#/components/schemas/TransferRequest'
       responses:
         '200':
-          description: Транзакция выполнена
+          description: Результат перевода
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionResponse'
-        '400':
-          description: Ошибка транзакции (например, недостаточно средств)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Доступ запрещен
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Карта не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
-  # =================== Users ===================
-  /api/admin/users:
+  /api/transactions/all:
     get:
-      tags:
-        - Users
-      summary: Получить всех пользователей
+      summary: Получение всех транзакций (ADMIN)
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: Список пользователей
+          description: Все транзакции
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/UserResponse'
+                  $ref: '#/components/schemas/TransactionResponse'
 
-  /api/admin/users/{id}:
+  /api/transactions/user/{userId}:
     get:
-      tags:
-        - Users
-      summary: Получить пользователя по ID
+      summary: Получение транзакций конкретного пользователя (ADMIN)
+      security:
+        - bearerAuth: []
       parameters:
-        - name: id
-          in: path
+        - in: path
+          name: userId
           required: true
           schema:
             type: integer
       responses:
         '200':
-          description: Пользователь найден
+          description: Транзакции пользователя
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
-
-    post:
-      tags:
-        - Users
-      summary: Создать пользователя
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
-      responses:
-        '200':
-          description: Пользователь создан
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserResponse'
-
-    delete:
-      tags:
-        - Users
-      summary: Удалить пользователя
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '204':
-          description: Пользователь удален
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     RegisterRequest:
       type: object
       properties:
-        firstName:
-          type: string
-        lastName:
-          type: string
-        username:
-          type: string
-        password:
-          type: string
-        email:
-          type: string
-        phoneNumber:
-          type: string
-        role:
-          type: string
-          enum: [USER, ADMIN]
-      required:
-        - firstName
-        - lastName
-        - email
-        - password
-        - phoneNumber
-
-    LoginRequest:
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phoneNumber: { type: string }
+        password: { type: string }
+        role: { type: string }
+    AuthRequest:
       type: object
       properties:
-        email:
-          type: string
-        password:
-          type: string
-      required:
-        - email
-        - password
-
+        email: { type: string }
+        password: { type: string }
     AuthResponse:
       type: object
       properties:
-        token:
-          type: string
-
-    CardRequest:
+        token: { type: string }
+        message: { type: string }
+        user:
+          $ref: '#/components/schemas/UserResponse'
+    UserRequest:
       type: object
       properties:
-        expirationDate:
-          type: string
-          format: date
-        limit:
-          type: number
-          format: double
-
-    CardResponse:
-      type: object
-      properties:
-        id:
-          type: integer
-        number:
-          type: string
-        expirationDate:
-          type: string
-          format: date
-        limit:
-          type: number
-          format: double
-        balance:
-          type: number
-          format: double
-        active:
-          type: boolean
-
-    TransactionResponse:
-      type: object
-      properties:
-        id:
-          type: integer
-        fromCard:
-          type: string
-        toCard:
-          type: string
-        amount:
-          type: number
-          format: double
-        status:
-          type: string
-
-    TransferRequest:
-      type: object
-      properties:
-        fromCardId:
-          type: integer
-        toCardId:
-          type: integer
-        amount:
-          type: number
-          format: double
-      required:
-        - fromCardId
-        - toCardId
-        - amount
-
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phoneNumber: { type: string }
+        role: { type: string }
     UserResponse:
       type: object
       properties:
-        id:
-          type: integer
-        firstName:
-          type: string
-        lastName:
-          type: string
-        email:
-          type: string
-        phoneNumber:
-          type: string
-        role:
-          type: string
-
+        id: { type: integer, format: int64 }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        role: { type: string }
+    CreateCardRequest:
+      type: object
+      properties:
+        cardNumber: { type: string }
+        balance: { type: number, format: double }
+    CardResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        cardNumber: { type: string }
+        cardHolder: { type: string }
+        expirationDate: { type: string, format: date }
+        cardStatus: { type: string }
+        balance: { type: number, format: double }
+        blockRequested: { type: boolean }
+    TransferRequest:
+      type: object
+      properties:
+        sourceCardId: { type: integer }
+        destinationCardId: { type: integer }
+        amount: { type: number, format: double }
+        description: { type: string }
+    TransactionResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        sourceCardMasked: { type: string }
+        destinationCardMasked: { type: string }
+        amount: { type: number, format: double }
+        type: { type: string }
+        status: { type: string }
+        timestamp: { type: string, format: date-time }
+        description: { type: string }
     ErrorResponse:
       type: object
       properties:
-        timestamp:
-          type: string
-          format: date-time
-        status:
-          type: integer
-        error:
-          type: string
-        message:
-          type: string
+        message: { type: string }
