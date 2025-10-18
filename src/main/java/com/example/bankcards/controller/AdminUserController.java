@@ -6,7 +6,6 @@ import com.example.bankcards.dto.UserResponse;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.mapper.UserMapper;
 import com.example.bankcards.service.UserService;
-import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;

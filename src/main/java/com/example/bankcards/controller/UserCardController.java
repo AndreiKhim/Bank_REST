@@ -1,14 +1,11 @@
 package com.example.bankcards.controller;
 
 import com.example.bankcards.dto.CardResponse;
-import com.example.bankcards.dto.TransferRequest;
-import com.example.bankcards.dto.TransactionResponse;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.exception.UserNotFoundException;
 import com.example.bankcards.service.CardService;
 import com.example.bankcards.service.TransactionService;
 import com.example.bankcards.service.UserService;
-import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
